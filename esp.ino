@@ -52,6 +52,10 @@ void setup() {
     while (WiFi.status() != WL_CONNECTED) { // Wait for the Wi-Fi to connect
       delay(1000);
       Serial.print(++i); Serial.print(' ');
+      if(i >= 10){
+        break;
+        startServer();
+      }
     }
     
     WiFi.softAPdisconnect(true);
@@ -64,7 +68,6 @@ void setup() {
     send_data = true;
   } else {
     startServer();
-    started = true;
   }
   delay(200);
 }
@@ -140,9 +143,9 @@ String SendHTML(String s, String p, String d){
   ptr +="</head>\n";
   ptr +="<body>\n";
   ptr +="<form action='setpassword' method='POST'>\n";
-  ptr +="<input type='text' name='ssid' placeholder='ssid' value='"+s+"'><br>\n";
-  ptr +="<input type='password' name='password' placeholder='password' value='"+p+"'><br>\n";
-  ptr +="<input type='text' name='device_id' placeholder='devide_id' value='"+d+"'><br>\n";
+  ptr +="<input type='text' name='ssid' placeholder='ssid'><br>\n";
+  ptr +="<input type='password' name='password' placeholder='password'><br>\n";
+  ptr +="<input type='text' name='device_id' placeholder='devide_id'><br>\n";
   ptr +="<input type='submit' name='submit' value='Submit'><br>\n";
   ptr +="</form>\n";
   ptr +="</body>\n";
@@ -198,4 +201,5 @@ void startServer(){
     Serial.print("MAC:"); Serial.println(WiFi.softAPmacAddress());
     server.on("/", handle_OnConnect);
     server.on("/setpassword", set_password);
+    started = true;
 }
