@@ -6,6 +6,9 @@
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #include <EEPROM.h>
+#include <ArduinoJson.h>
+#include <SPI.h>
+
 extern "C" {
 #include <user_interface.h>
 }
@@ -21,6 +24,7 @@ IPAddress mask = (255, 255, 255, 0);
 
 String ssid     = "";
 String password = "";
+String device_id = "0";
 bool send_data = false;
 
 void setup() {
@@ -30,7 +34,7 @@ void setup() {
   resetInfo = ESP.getResetInfoPtr();
   if(resetInfo->reason == 6){
     EEPROM.begin(EEPROM_SIZE);
-    for(int i=0; i < 500; i++){
+    for(int i=0; i < 1026; i++){
       EEPROM.write(i,0);
     }
     EEPROM.commit();
@@ -38,7 +42,7 @@ void setup() {
   }
   get_password();
   if(ssid != ""){
-    if(password != ""){
+    if(password != "*NULL*"){
       WiFi.begin(ssid, password);
     } else WiFi.begin(ssid);
     Serial.print("Connecting to ");
@@ -55,6 +59,8 @@ void setup() {
     Serial.println("Connection established!");  
     Serial.print("IP address:\t");
     Serial.println(WiFi.localIP());
+    Serial.print("Devide_id:");
+    Serial.println(device_id);
     send_data = true;
   } else {
     WiFi.mode(WIFI_AP);
@@ -79,13 +85,15 @@ void loop() {
      StringReady = true;
      data = Serial.readString();
     }
-    if (StringReady){
+    if (StringReady && device_id != "0"){
       if(data == "CLEAR"){
         
         return;
       }
       HTTPClient http;
-      String link = url+data;
+      long rssi = WiFi.RSSI();
+      String link = url+data+"&wf="+rssi+"&device_id="+device_id;
+      Serial.println(link);
       http.begin(link);
   
       int httpCode = http.GET();
@@ -98,40 +106,34 @@ void loop() {
 
 void get_password()
 {
-  EEPROM.begin(EEPROM_SIZE);
-  int len=0;
-  char s;
-  char p;
-  s = char(EEPROM.read(len));
-  while(s != '\0' && len<500)
-  {    
-    s = EEPROM.read(len);
-    ssid += char(EEPROM.read(len));
-    len++;
-  }
-  Serial.println("");
-  if(len >= 499){
-    ssid = "";
-    return;
-  }
-  p = EEPROM.read(len);
-  while(p != '\0' && len<500){
-    p = EEPROM.read(len);
-    password += char(EEPROM.read(len));
-    len++;
-  }
   
-  if(len >= 499){
-    password = "";
-    return;
+  DynamicJsonDocument doc(1024);
+  
+  int len=0;
+  char c;
+  String json_string = "";
+  
+  EEPROM.begin(EEPROM_SIZE);
+  c = EEPROM.read(len);
+  while(c != '\0' && len<1025){
+    c = EEPROM.read(len);
+    json_string += c;
+    len++;
   }
   EEPROM.end();
+
+  deserializeJson(doc, json_string);
+  JsonObject data = doc.as<JsonObject>();
+  
+  ssid      = (const char*)data["ssid"];
+  password  = (const char*)data["password"];
+  device_id = (const char*)data["device_id"];
+
 }
 
 void handle_OnConnect() {
   server.send(200, "text/html", SendHTML()); 
 }
-
 
 String SendHTML(){
   String ptr = "<!DOCTYPE html> <html>\n";
@@ -142,6 +144,7 @@ String SendHTML(){
   ptr +="<form action='setpassword' method='POST'>\n";
   ptr +="<input type='text' name='ssid' placeholder='ssid'><br>\n";
   ptr +="<input type='password' name='password' placeholder='password'><br>\n";
+  ptr +="<input type='text' name='device_id' placeholder='devide_id'><br>\n";
   ptr +="<input type='submit' name='submit' value='Submit'><br>\n";
   ptr +="</form>\n";
   ptr +="</body>\n";
@@ -152,29 +155,36 @@ String SendHTML(){
 void set_password(){
   EEPROM.begin(EEPROM_SIZE);
   String ssid_ = "";
-  String password_ = "";
+  String password_ = "*NULL*\0";
+  String device_id_ = "";
   if (server.hasArg("ssid")){
       ssid_ = server.arg("ssid")+'\0';
   }
-  if (server.hasArg("password")){
+  if (server.hasArg("password") && server.arg("password") != ""){
      password_ = server.arg("password")+'\0';
   }
+  if (server.hasArg("device_id")){
+     device_id_ =  server.arg("device_id")+'\0';
+  }
+
+  String json_string = "";
+  DynamicJsonDocument doc(1024);
+  JsonObject data = doc.to<JsonObject>();
   
-  int _size_s = ssid_.length();
-  int _size_p = password_.length();
-  int i;
-  for(i=0;i<_size_s;i++)
-  {
-    EEPROM.write(i,ssid_[i]);
+  data["ssid"] = ssid_;
+  data["password"] = password_;
+  data["device_id"] = device_id_;
+
+  serializeJson(doc, json_string);
+
+  Serial.println(json_string);
+  
+  json_string += '\0';
+
+  for(int i = 0; i < json_string.length(); i++){
+    EEPROM.write(i,json_string[i]);
   }
-  EEPROM.write(i,'\0');
-  i++;
-  int j;
-  for(j=0;j<_size_p;j++)
-  {
-    EEPROM.write(i+j,password_[j]);
-  }
-  EEPROM.write(i+j,'\0');
+  
   EEPROM.commit();
   EEPROM.end();
   get_password();
