@@ -26,7 +26,7 @@ String ssid     = "";
 String password = "";
 String device_id = "0";
 bool send_data = false;
-
+bool started = false;
 void setup() {
   Serial.begin(115200);
   delay(100);
@@ -63,20 +63,18 @@ void setup() {
     Serial.println(device_id);
     send_data = true;
   } else {
-    WiFi.mode(WIFI_AP);
-    WiFi.softAP("Ecobox", NULL);
-    WiFi.softAPConfig(IP, IP, mask);
-    server.begin();
-    Serial.println("Server started.");
-    Serial.print("IP: "); Serial.println(WiFi.softAPIP());
-    Serial.print("MAC:"); Serial.println(WiFi.softAPmacAddress());
-    server.on("/", handle_OnConnect);
-    server.on("/setpassword", set_password);
+    startServer();
+    started = true;
   }
   delay(200);
 }
 WiFiClient client;
 void loop() {
+  if (WiFi.status() != WL_CONNECTED && !started)
+  {
+    startServer();
+    send_data = false;
+  }
   if(send_data){
     bool StringReady = false;
     String data = "";
@@ -132,19 +130,19 @@ void get_password()
 }
 
 void handle_OnConnect() {
-  server.send(200, "text/html", SendHTML()); 
+  server.send(200, "text/html", SendHTML(ssid, password, device_id == "0" ? "" : device_id)); 
 }
 
-String SendHTML(){
+String SendHTML(String s, String p, String d){
   String ptr = "<!DOCTYPE html> <html>\n";
   ptr +="<head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, user-scalable=no\">\n";
   ptr +="<title>EcoBox</title>\n";
   ptr +="</head>\n";
   ptr +="<body>\n";
   ptr +="<form action='setpassword' method='POST'>\n";
-  ptr +="<input type='text' name='ssid' placeholder='ssid'><br>\n";
-  ptr +="<input type='password' name='password' placeholder='password'><br>\n";
-  ptr +="<input type='text' name='device_id' placeholder='devide_id'><br>\n";
+  ptr +="<input type='text' name='ssid' placeholder='ssid' value='"+s+"'><br>\n";
+  ptr +="<input type='password' name='password' placeholder='password' value='"+p+"'><br>\n";
+  ptr +="<input type='text' name='device_id' placeholder='devide_id' value='"+d+"'><br>\n";
   ptr +="<input type='submit' name='submit' value='Submit'><br>\n";
   ptr +="</form>\n";
   ptr +="</body>\n";
@@ -189,4 +187,15 @@ void set_password(){
   EEPROM.end();
   get_password();
   ESP.restart();
+}
+void startServer(){
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP("Ecobox", NULL);
+    WiFi.softAPConfig(IP, IP, mask);
+    server.begin();
+    Serial.println("Server started.");
+    Serial.print("IP: "); Serial.println(WiFi.softAPIP());
+    Serial.print("MAC:"); Serial.println(WiFi.softAPmacAddress());
+    server.on("/", handle_OnConnect);
+    server.on("/setpassword", set_password);
 }
