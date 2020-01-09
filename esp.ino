@@ -59,6 +59,7 @@ void setup() {
   Serial.println("Server started.");
   Serial.print("IP: "); Serial.println(WiFi.softAPIP());
   Serial.print("MAC:"); Serial.println(WiFi.softAPmacAddress());
+  Serial.println(server_password);
   server.on("/", send_status);
   server.on("/setpassword", set_password);
   server.on("/connect", handle_OnConnect);
@@ -138,7 +139,6 @@ void get_password()
   password  = (const char*)data["password"];
   device_id = (const char*)data["device_id"];
   server_password = (const char*)data["server_password"];
-
 }
 
 void handle_OnConnect() {
@@ -241,8 +241,6 @@ void changeServerPassword(){
     EEPROM.write(i,0);
   }
   EEPROM.commit();
-  EEPROM.end();
-
 
   String json_string = "";
   DynamicJsonDocument doc(1024);
